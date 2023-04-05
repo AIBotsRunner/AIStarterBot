@@ -1,108 +1,113 @@
+
+// const { clientId, guildId, token, publicKey } = require('./config.json');
+require('dotenv').config()
+const APPLICATION_ID = process.env.APPLICATION_ID 
+const TOKEN = process.env.TOKEN 
+const PUBLIC_KEY = process.env.PUBLIC_KEY || 'not set'
+const GUILD_ID = process.env.GUILD_ID 
+
+
+const axios = require('axios')
 const express = require('express');
-const fs = require('fs');
-const fse = require('fs-extra');
-const { exec } = require('child_process');
-const { spawn } = require('child_process');
-const cors = require('cors');
+const { InteractionType, InteractionResponseType, verifyKeyMiddleware } = require('discord-interactions');
+
+
 const app = express();
+// app.use(bodyParser.json());
 
-app.use(cors());
-app.use(express.urlencoded({ extended: true }));
-app.use(express.static('public'));
+const discord_api = axios.create({
+  baseURL: 'https://discord.com/api/',
+  timeout: 3000,
+  headers: {
+	"Access-Control-Allow-Origin": "*",
+	"Access-Control-Allow-Methods": "GET, POST, PUT, DELETE",
+	"Access-Control-Allow-Headers": "Authorization",
+	"Authorization": `Bot ${TOKEN}`
+  }
+});
 
-const corsOptions = {
-  origin: 'https://cyberkun.com/',
-  optionsSuccessStatus: 200
-};
 
-// Define a function to find an available port
-function findAvailablePort(startingPort, callback) {
-  const net = require('net');
-  const server = net.createServer();
 
-  server.on('error', () => {
-    // Port is not available, try the next one
-    findAvailablePort(startingPort + 1, callback);
-  });
 
-  server.listen(startingPort, () => {
-    server.close(() => {
-      // Found an available port
-      callback(startingPort);
-    });
-  });
-}
+app.post('/interactions', verifyKeyMiddleware(PUBLIC_KEY), async (req, res) => {
+  const interaction = req.body;
 
-app.post('/Bot_Create', cors(corsOptions), (req, res) => {
-  // Add CORS headers to the response
-  res.setHeader('Access-Control-Allow-Origin', 'https://cyberkun.com');
-  res.setHeader('Access-Control-Allow-Methods', 'POST');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  const username = req.body.username.toString();
-  const userFolder = `./Users/Users_Bots/${username}`;
+  if (interaction.type === InteractionType.APPLICATION_COMMAND) {
+    console.log(interaction.data.name)
+    if(interaction.data.name == 'yo'){
+      return res.send({
+        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+        data: {
+          content: `Yo ${interaction.member.user.username}!`,
+        },
+      });
+    }
 
-  // Check if user folder exists, create it if it doesn't
-  if (!fs.existsSync(userFolder)){
-    fs.mkdirSync(userFolder);
+    if(interaction.data.name == 'dm'){
+      // https://discord.com/developers/docs/resources/user#create-dm
+      let c = (await discord_api.post(`/users/@me/channels`,{
+        recipient_id: interaction.member.user.id
+      })).data
+      try{
+        // https://discord.com/developers/docs/resources/channel#create-message
+        let res = await discord_api.post(`/channels/${c.id}/messages`,{
+          content:'Yo! I got your slash command. I am not able to respond to DMs just slash commands.',
+        })
+        console.log(res.data)
+      }catch(e){
+        console.log(e)
+      }
+
+      return res.send({
+        // https://discord.com/developers/docs/interactions/receiving-and-responding#responding-to-an-interaction
+        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+        data:{
+          content:'👍'
+        }
+      });
+    }
   }
 
-  // Copy BotAI folder to user folder
-  const botAIFolder = './Users/BotsForUsers/BotAI';
-  const userBotAIFolder = `${userFolder}`;
-  exec(`cp -R ${botAIFolder} ${userBotAIFolder}`, (err) => {
-    if (err) {
-      console.error(err);
-      res.status(500).send('Error copying bot AI folder');
-      return;
-    }
-    // console.log('Bot AI folder copied to user folder');
-  });  
-
-  // Read the original bot code from the file
-  const BOT_FILE = '../BotAI/dist/index.js';
-  fs.readFile(BOT_FILE, 'utf8', (err, botCode) => {
-    if (err) {
-      console.error(err);
-      res.status(500).send('Error reading bot code file');
-      return;
-    }
-
-    // Generate the bot script code with the user's configuration
-    findAvailablePort(3001, (port) => {
-      const botScript = `
-        ${botCode}
-
-app.listen(${port}, () => {
-    console.log('Server running on port ${port}');
-});
-      `;
-
-      // Write the new bot script to a file with a unique name
-      const fileName = `${userFolder}/BotAI/dist/index.js`;
-      fs.writeFile(fileName, botScript, (err) => {
-        if (err) {
-          console.error(err);
-          res.status(500).send('Error writing bot script to file');
-          return;
-        }
-
-        // Spawn the bot script process
-        const botProcess = spawn('node', [fileName]);
-
-	console.log(`[*] Session created for ${username}`);
-
-        // Send a success response to the user
-        res.send('Bot script created and running');
-
-        // Log any errors from the bot process
-        botProcess.stderr.on('data', (data) => {
-            console.error(data.toString());
-        });
-      });
-    });
-  });
 });
 
-app.listen(3000, () => {
-    console.log('Server running on port 3000');
-}); 
+
+
+app.get('/register_commands', async (req,res) =>{
+  let slash_commands = [
+    {
+      "name": "yo",
+      "description": "replies with Yo!",
+      "options": []
+    },
+    {
+      "name": "dm",
+      "description": "sends user a DM",
+      "options": []
+    }
+  ]
+  try
+  {
+    // api docs - https://discord.com/developers/docs/interactions/application-commands#create-global-application-command
+    let discord_response = await discord_api.put(
+      `/applications/${APPLICATION_ID}/guilds/${GUILD_ID}/commands`,
+      slash_commands
+    )
+    console.log(discord_response.data)
+    return res.send('commands have been registered')
+  }catch(e){
+    console.error(e.code)
+    console.error(e.response?.data)
+    return res.send(`${e.code} error from discord`)
+  }
+})
+
+
+app.get('/', async (req,res) =>{
+  return res.send('Follow documentation ')
+})
+
+
+app.listen(8999, () => {
+
+})
+
