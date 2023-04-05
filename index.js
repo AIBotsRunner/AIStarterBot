@@ -1,6 +1,5 @@
 const express = require('express');
 const fs = require('fs');
-const fse = require('fs-extra');
 const { exec } = require('child_process');
 const { spawn } = require('child_process');
 const cors = require('cors');
