@@ -1,9 +1,19 @@
+
+// const { clientId, guildId, token, publicKey } = require('./config.json');
+require('dotenv').config()
+const APPLICATION_ID = process.env.APPLICATION_ID 
+const TOKEN = process.env.TOKEN 
+const PUBLIC_KEY = process.env.PUBLIC_KEY || 'not set'
+const GUILD_ID = process.env.GUILD_ID 
+
+
+const axios = require('axios')
 const express = require('express');
-// const fs = require('fs');
-// const { exec } = require('child_process');
-// const { spawn } = require('child_process');
-const cors = require('cors');
+const { InteractionType, InteractionResponseType, verifyKeyMiddleware } = require('discord-interactions');
+
+
 const app = express();
+// app.use(bodyParser.json());
 
 app.use(cors());
 app.use(express.urlencoded({ extended: true }));
@@ -87,4 +97,3 @@ const server = app.listen(3000, () => {
     console.log('Server running on port 3000');
 });
 
-// module.exports = server;
